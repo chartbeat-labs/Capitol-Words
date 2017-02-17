@@ -29,6 +29,7 @@ from zipfile import ZipFile
 import boto3
 from botocore.exceptions import ClientError
 
+
 DEFAULT_LOG_FORMAT = ' '.join([
     '%(asctime)s',
     '%(levelname)s',
@@ -53,7 +54,7 @@ class CRECStager(object):
 
     Args:
         date (:class:`datetime.datetime`): Date of records to download.
-        zip_download_dir (:obj:`str`): A directory to download and unpack the
+        download_dir (:obj:`str`): A directory to download and unpack the
             CREC zip.
         s3_bucket (:obj:`str`): The name of an S3 bucket to stage unpacked html
             files in.
@@ -65,10 +66,11 @@ class CRECStager(object):
     """
 
     CREC_ZIP_TEMPLATE = 'https://www.gpo.gov/fdsys/pkg/CREC-%Y-%m-%d.zip'
+    MODS_ZIP_TEMPLATE = 'https://www.gpo.gov/fdsys/pkg/CREC-%Y-%m-%d/mods.xml'
 
-    def __init__(self, date, zip_download_dir, s3_bucket, s3_key_prefix):
+    def __init__(self, date, download_dir, s3_bucket, s3_key_prefix):
         self.date = date
-        self.zip_download_dir = zip_download_dir
+        self.download_dir = download_dir
         self.s3_bucket = s3_bucket
         self.s3_key_prefix = s3_key_prefix
         self.s3 = boto3.client('s3')
@@ -87,15 +89,38 @@ class CRECStager(object):
             if e.getcode() == 404:
                 logging.debug('No zip found for date {0}'.format(self.date))
                 return None
-        zip_path = os.path.join(self.zip_download_dir, url.split('/')[-1])
+        zip_path = os.path.join(self.download_dir, url.split('/')[-1])
         zip_data = response.read()
         with open(zip_path, 'wb') as f:
             f.write(zip_data)
         return zip_path
 
+    def download_mods_xml(self):
+        """Downloads the mods.xml metadata file for this date to download_dir.
+
+        Returns:
+            :obj:`str`: Path to the downloaded mods.xml file.
+        """
+        url = self.date.strftime(self.MODS_ZIP_TEMPLATE)
+        logging.info('Downloading mods.xml from "{0}".'.format(url))
+        try:
+            response = urllib2.urlopen(url)
+        except urllib2.URLError as e:
+            if e.getcode() == 404:
+                logging.debug('No mods.xml found for date {0}, at "{1}"'.format(
+                        self.date, url
+                    )
+                )
+                return None
+        data = response.read()
+        mods_path = os.path.join(self.download_dir, 'mods.xml')
+        with open(mods_path, 'w') as f:
+            f.write(data)
+        return mods_path
+
     def extract_html_files(self, zip_path):
         """Unpacks all html files in the zip at the provided path to the value
-        set in the instance variable ``CRECStager.zip_download_dir``.
+        set in the instance variable ``CRECStager.download_dir``.
 
         Args:
             zip_path (:obj:`str`): Path to the CREC zip file.
@@ -110,18 +135,19 @@ class CRECStager(object):
             for f in crec_zip.filelist:
                 if f.filename.startswith(html_prefix):
                     html_filenames.append(f.filename)
-                    crec_zip.extract(f, self.zip_download_dir)
+                    crec_zip.extract(f, self.download_dir)
         return [
-            os.path.join(self.zip_download_dir, fname)
+            os.path.join(self.download_dir, fname)
             for fname in html_filenames
         ]
 
-    def upload_to_s3(self, file_path):
+    def upload_to_s3(self, file_path, data_type):
         """Uploads the file at the provided path to s3. The s3 key is
         generated from the date, the original filename, and the s3_key_prefix.
 
         Args:
             file_path (:obj:`str`): Path to html file.
+            data_type (:obj:`str`): One of "crec" or "mods", used in s3 key.
 
         Returns:
             :obj:`str`: The S3 key the file was uploaded to.
@@ -129,43 +155,53 @@ class CRECStager(object):
         s3_key = os.path.join(
             self.s3_key_prefix,
             self.date.strftime('%Y/%m/%d'),
+            data_type,
             os.path.basename(file_path),
         )
-        with open(file_path) as html_file:
+        with open(file_path) as f:
             logging.debug(
                 'Uploading "{0}" to "s3://{1}/{2}".'.format(
                     file_path, self.s3_bucket, s3_key
                 )
             )
             self.s3.put_object(
-                Body=html_file, Bucket=self.s3_bucket, Key=s3_key
+                Body=f, Bucket=self.s3_bucket, Key=s3_key
             )
         return s3_key
 
-    def stage_html_files(self):
+    def stage_files(self):
         """Main entry point to staging process. Downloads the CREC zip for this
-        date, unpacks all HTML files to disk, then uploads each one to S3.
+        date, unpacks all HTML files to disk, downloads the mods.xml metadata
+        file, and uploads that and the unpacked HTML files.
 
         Returns:
             :obj:`bool`: True if all uploads were successful, False otherwise.
         """
         zip_path = self.download_crec_zip()
+        mods_path = self.download_mods_xml()
         if zip_path is None:
             logging.info('No zip found for date {0}'.format(self.dt))
             return None
         logging.info(
-            'Extracting html files from zip to {0}'.format(self.zip_download_dir)
+            'Extracting html files from zip to {0}'.format(self.download_dir)
         )
         html_file_paths = self.extract_html_files(zip_path)
         logging.info('Uploading {0} html files...'.format(len(html_file_paths)))
         for file_path in html_file_paths:
             try:
-                s3_key = self.upload_to_s3(file_path)
+                s3_key = self.upload_to_s3(file_path, 'crec')
             except ClientError as e:
                 logging.exception(
-                    'Error uploading .htm file {0}, exiting'.format(file_path, e)
+                    'Error uploading file {0}, exiting'.format(file_path, e)
                 )
                 return False
+        try:
+            s3_key = self.upload_to_s3(mods_path, 'mods')
+        except ClientError as e:
+            logging.exception(
+                'Error uploading file {0}, exiting'.format(mods_path, e)
+            )
+            return False
         logging.info('Uploads finished.')
         return True
 
@@ -178,9 +214,10 @@ def lambda_handler(event, context):
     console):
         LOGLEVEL
             loglevel for logging to cloudwatch
-        ZIP_DOWNLOAD_DIR
-            what directory to download and unpack CREC zips. Must be under
-            ``/tmp`` as everything else is write protected in lambda.
+        DOWNLOAD_DIR
+            what directory to download and unpack CREC zips and the mods.xml
+            file. Must be under ``/tmp`` when running in lambda as everything
+            else is write protected.
         S3_TARGET_BUCKET
             what s3 bucket to upload unpacked html files to.
 
@@ -191,18 +228,18 @@ def lambda_handler(event, context):
     logger = logging.getLogger()
     logger.setLevel(os.environ.get('LOGLEVEL', 'INFO'))
     formatter = logging.Formatter(DEFAULT_LOG_FORMAT)
-    zip_download_dir = os.environ.get('ZIP_DOWNLOAD_DIR', '/tmp')
+    download_dir = os.environ.get('DOWNLOAD_DIR', '/tmp')
     s3_bucket = os.environ.get('S3_TARGET_BUCKET')
     if not s3_bucket:
         raise Exception('No s3 bucket defined in $S3_TARGET_BUCKET.')
     s3_key_prefix = os.environ.get('S3_KEY_PREFIX', 'capitolwords/')
     crec_stager = CRECStager(
         datetime.utcnow() - timedelta(days=1),
-        zip_download_dir,
+        download_dir,
         s3_bucket,
         s3_key_prefix
     )
-    crec_stager.stage_html_files()
+    crec_stager.stage_files()
 
 
 if __name__ == '__main__':
@@ -223,7 +260,7 @@ if __name__ == '__main__':
         default='capitolwords/',
     )
     parser.add_argument(
-        '--zip_download_dir',
+        '--download_dir',
         help='Directory to write the zip and extracted files to.',
         default='/tmp'
     )
@@ -247,12 +284,12 @@ if __name__ == '__main__':
         dt = args.date
     else:
         dt = datetime.utcnow() - timedelta(days=1)
-    if not os.path.exists(args.zip_download_dir):
-        os.makedirs(args.zip_download_dir)
+    if not os.path.exists(args.download_dir):
+        os.makedirs(args.download_dir)
     crec_stager = CRECStager(
         dt,
-        zip_download_dir,
-        s3_bucket,
-        s3_key_prefix
+        args.download_dir,
+        args.s3_bucket,
+        args.s3_key_prefix
     )
-    crec_stager.stage_html_files()
+    crec_stager.stage_files()
