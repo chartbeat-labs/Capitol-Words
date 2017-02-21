@@ -180,12 +180,22 @@ class CRECStager(object):
         zip_path = self.download_crec_zip()
         mods_path = self.download_mods_xml()
         if zip_path is None:
-            logging.info('No zip found for date {0}'.format(self.dt))
+            logging.info('No zip found for date {0}'.format(self.date))
+            return None
+        if mods_path is None:
+            logging.info('No mods.xml found for date {0}'.format(self.date))
             return None
         logging.info(
             'Extracting html files from zip to {0}'.format(self.download_dir)
         )
         html_file_paths = self.extract_html_files(zip_path)
+        try:
+            s3_key = self.upload_to_s3(mods_path, 'mods')
+        except ClientError as e:
+            logging.exception(
+                'Error uploading file {0}, exiting'.format(mods_path, e)
+            )
+            return False
         logging.info('Uploading {0} html files...'.format(len(html_file_paths)))
         for file_path in html_file_paths:
             try:
@@ -195,13 +205,6 @@ class CRECStager(object):
                     'Error uploading file {0}, exiting'.format(file_path, e)
                 )
                 return False
-        try:
-            s3_key = self.upload_to_s3(mods_path, 'mods')
-        except ClientError as e:
-            logging.exception(
-                'Error uploading file {0}, exiting'.format(mods_path, e)
-            )
-            return False
         logging.info('Uploads finished.')
         return True
 
@@ -220,6 +223,8 @@ def lambda_handler(event, context):
             else is write protected.
         S3_TARGET_BUCKET
             what s3 bucket to upload unpacked html files to.
+        DATE
+            what day to look for crec data for.
 
     Args:
         event (:obj:`dict`): A dictionary containg data from event trigger.
@@ -229,12 +234,17 @@ def lambda_handler(event, context):
     logger.setLevel(os.environ.get('LOGLEVEL', 'INFO'))
     formatter = logging.Formatter(DEFAULT_LOG_FORMAT)
     download_dir = os.environ.get('DOWNLOAD_DIR', '/tmp')
+    date_str = os.environ.get('DATE', None)
+    if date_str is None:
+        date = datetime.utcnow() - timedelta(days=1)
+    else:
+        date = datetime.strptime(date_str, '%Y-%m-%d')
     s3_bucket = os.environ.get('S3_TARGET_BUCKET')
     if not s3_bucket:
         raise Exception('No s3 bucket defined in $S3_TARGET_BUCKET.')
     s3_key_prefix = os.environ.get('S3_KEY_PREFIX', 'capitolwords/')
     crec_stager = CRECStager(
-        datetime.utcnow() - timedelta(days=1),
+        date,
         download_dir,
         s3_bucket,
         s3_key_prefix
