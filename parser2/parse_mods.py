@@ -5,6 +5,7 @@
 from __future__ import print_function
 
 import json
+import logging
 import argparse
 
 from lxml import etree
@@ -46,13 +47,18 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Extract constituent records from mods.xml.",
     )
+    parser.add_argument('--loglevel', type=str, default='info',
+                        help="log level")
     parser.add_argument('--mods', type=str, required=True,
                         help="xml file to load")
     parser.add_argument('--out', type=str, default='-',
                         help="output destination (defaults to stdout)")
     args = parser.parse_args()
 
+    logging.basicConfig(level=args.loglevel.upper())
+
     if args.out == '-':
+        logging.debug("using stdout outputter")
         outputter = stdout_outputter
     else:
         raise OutputDestinationError("unknown output destination %s" % args.out)
