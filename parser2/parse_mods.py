@@ -7,7 +7,10 @@ from __future__ import print_function
 import json
 import logging
 import argparse
+import urlparse
+from functools import partial
 
+import elasticsearch
 from lxml import etree
 
 
@@ -39,8 +42,62 @@ class OutputDestinationError(Exception):
     pass
 
 def stdout_outputter(records):
+    """Outputs records to stdout in json format."""
+
     for r in records:
         print(json.dumps(r))
+
+def es_outputter(es_conn, index, records):
+    """Writes records into ES_CONN.
+
+    Note this isn't exactly an outputter since it takes an
+    Elasticsearch connection argument.
+
+    """
+
+    for r in records:
+        es_conn.index(index=index, doc_type='crec', id=r['ID'], body=r)
+
+def make_outputter(spec):
+    """Returns an outputter function given an output SPEC.
+
+    Outputter functions have one argument, the record they're supposed to output.
+
+    If SPEC is '-' then returns a stdout outputter.
+
+    If SPEC is 'es://HOST:PORT/INDEX' returns an Elasticsearch outputter.
+
+    Otherwise, raises OutputDestinationError.
+
+    """
+
+    if spec == '-':
+        logging.debug("using stdout outputter")
+
+        return stdout_outputter
+    elif spec.startswith('es://'):
+        logging.debug("using Elasticsearch outputter")
+
+        comps = urlparse.urlparse(spec)
+        if comps.scheme != 'es':
+            # if we get here I have no clue what's going on, because
+            # the string started with 'es://'
+            raise OutputDestinationError(
+                "impossible error parsing Elasticsearch output spec %s",
+                spec,
+            )
+        es_host = comps.netloc
+        index = comps.path.strip('/')
+
+        if not es_host or not index:
+            raise OutputDestinationError("couldn't extract host and index from %s", spec)
+
+        logging.debug("connecting to Elasticsearch host %s index %s", es_host, index)
+        es_conn = elasticsearch.Elasticsearch([es_host])
+        es_conn.info()
+        return partial(es_outputter, es_conn, index)
+    else:
+        raise OutputDestinationError("unknown output destination %s" % spec)
 
 
 if __name__ == '__main__':
@@ -52,22 +109,24 @@ if __name__ == '__main__':
     parser.add_argument('--mods', type=str, required=True,
                         help="xml file to load")
     parser.add_argument('--out', type=str, default='-',
-                        help="output destination (defaults to stdout)")
+                        help="output destination (defaults to stdout, use es://HOST:PORT for Elasticsearch)")
     args = parser.parse_args()
 
     logging.basicConfig(level=args.loglevel.upper())
 
-    if args.out == '-':
-        logging.debug("using stdout outputter")
-        outputter = stdout_outputter
-    else:
-        raise OutputDestinationError("unknown output destination %s" % args.out)
-    tree = etree.parse(open(args.mods, 'r'))
+    outputter = make_outputter(args.out)
 
+    tree = etree.parse(open(args.mods, 'r'))
     constituents = tree.xpath(
         '//ns:relatedItem[@type="constituent"]',
         namespaces=DEFAULT_XML_NS,
     )
+    date_issued = tree.xpath(
+        'string(//ns:originInfo/ns:dateIssued)',
+        namespaces=DEFAULT_XML_NS,
+    )
+
+    logging.info("date issued: %s", date_issued)
 
     records = [
         xpath_parse(
@@ -86,5 +145,7 @@ if __name__ == '__main__':
         )
         for r in constituents
     ]
+    for r in records:
+        r['date'] = date_issued
 
     outputter(records)
