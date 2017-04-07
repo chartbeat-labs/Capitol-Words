@@ -4,6 +4,7 @@
 
 from __future__ import print_function
 
+import json
 import argparse
 
 from lxml import etree
@@ -38,7 +39,7 @@ class OutputDestinationError(Exception):
 
 def stdout_outputter(records):
     for r in records:
-        print(r)
+        print(json.dumps(r))
 
 
 if __name__ == '__main__':
