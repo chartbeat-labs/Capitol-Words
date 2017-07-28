@@ -26,15 +26,14 @@ def make_search():
     return Search(index=settings.ES_CW_INDEX)
 
 
-def execute_search(query, sorting='-date_issued'):
+def execute_search(query):
     """
     Runs a search with basic handling for sorting
     :param query: the query to execute
     :param sorting: the type of sorting, i.e. -dateIssued
     :return: results or False
     """
-    search = make_search().sort(sorting)
-    results = search.query(query).execute()
+    results = make_search().query(query).execute()
     if results.success():
         return results
     return False
@@ -127,7 +126,6 @@ def search_by_params(request):
     """
     logger.debug("search_by_params")
     params = request.GET
-    search = make_search().sort('-date_issued')
     queries = []
     for f in QUERIES:
         if f in params:
@@ -145,9 +143,9 @@ def search_by_params(request):
         frag_size = params.get('highlight')
         if not frag_size.isnumeric():
             frag_size = 200
-        response = search.highlight('content', fragment_size=frag_size).query(q).execute()
+        response = make_search().highlight('content', fragment_size=frag_size).query(q).execute()
     else:
-        response = search.query(q).execute()
+        response = make_search().query(q).execute()
     if response.success():
         return JsonResponse(response.to_dict())
     return JsonResponse("Found nothing")

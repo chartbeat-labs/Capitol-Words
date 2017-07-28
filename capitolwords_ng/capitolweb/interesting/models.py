@@ -1,4 +1,6 @@
 from django.db import models
+from django_extensions.db.models import TimeStampedModel
+
 from legislators.models import CongressPerson
 
 
@@ -24,11 +26,11 @@ class InterestingSearch(models.Model):
     def __str__(self):
         return self.name
     name = models.CharField(max_length=30, unique=True)
-    entities = models.ManyToManyField(NamedEntity)
-    search_terms = models.ManyToManyField(SearchTerm)
+    entities = models.ManyToManyField(NamedEntity, blank=True)
+    search_terms = models.ManyToManyField(SearchTerm, blank=True)
 
 
-class FoundResult(models.Model):
+class FoundResult(TimeStampedModel):
     class Meta:
         unique_together = (("interesting_search", "speaker", "document_id"),)
     interesting_search = models.ForeignKey(InterestingSearch, on_delete=models.CASCADE)
@@ -36,5 +38,6 @@ class FoundResult(models.Model):
     document_id = models.CharField(max_length=100)
     document_date = models.DateField()
     document_title = models.CharField(max_length=255)
-    fragment = models.TextField()
+    fragment = models.TextField(default='')
+    score = models.FloatField(blank=True, null=True)
 
