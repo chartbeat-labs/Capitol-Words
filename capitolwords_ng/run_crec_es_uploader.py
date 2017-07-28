@@ -26,7 +26,7 @@ if __name__ == '__main__':
     output_option_group = parser.add_mutually_exclusive_group(required=True)
     output_option_group.add_argument(
         '--to_stdout',
-        help='If true, will not upload to es and instead print to stdout.',
+        help='If true, will not upload to elasticsearch and instead print to stdout.',
         action='store_true'
     )
     output_option_group.add_argument(
@@ -47,7 +47,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--source_bucket',
-        help='Location of crec data.',
+        help='S3 bucket name of crec source data.',
     )
     args = parser.parse_args()
 

@@ -1,39 +1,25 @@
-"""Service for staging unpacked html files from a daily zip of congressional
+"""Stages unpacked html files from a daily zip of congressional
 records retrieved from gpo.gov.
-
-This module can be used either from the command line, or deployed as an AWS
-Lambda function (see :func:``lambda_handler`` for details on lambda execution).
-
-To run locally:
-
-    ::
-
-        python crec_stager.py --s3_bucket=mybukkit
 
 Attributes:
     DEFAULT_LOG_FORMAT (:obj:`str`): A template string for log lines.
     LOGLEVELS (:obj:`dict`): A lookup of loglevel name to the loglevel code.
 """
 
-from __future__ import print_function
-
 import os
 import sys
-import urllib2
 import logging
 import argparse
 from datetime import datetime
 from datetime import timedelta
 from zipfile import ZipFile
 from collections import defaultdict
+from urllib.request import urlopen
+from urllib.error import HTTPError
 
 import boto3
 import requests
 from botocore.exceptions import ClientError
-
-from cli import setup_logger
-from cli import add_logging_options
-from cli import CMD_LINE_DATE_FORMAT
 
 
 def get_dates(start_dt, end_dt=None):
@@ -73,7 +59,7 @@ class CRECScraper(object):
         self.download_dir = download_dir
         self.s3_bucket = s3_bucket
         self.s3_key_prefix = s3_key_prefix
-        self.s3 = boto3.client('s3')
+        self.s3 = boto3.resource('s3')
 
     def download_crec_zip(self, date):
         """Downloads the CREC zip for this date.
@@ -84,8 +70,8 @@ class CRECScraper(object):
         url = date.strftime(self.CREC_ZIP_TEMPLATE)
         logging.info('Downloading CREC zip from "{0}".'.format(url))
         try:
-            response = urllib2.urlopen(url)
-        except urllib2.HTTPError as e:
+            response = urlopen(url)
+        except HTTPError as e:
             if e.getcode() == 404:
                 logging.info('No zip found for date {0}'.format(date))
             else:
@@ -106,8 +92,8 @@ class CRECScraper(object):
         url = date.strftime(self.MODS_ZIP_TEMPLATE)
         logging.info('Downloading mods.xml from "{0}".'.format(url))
         try:
-            response = urllib2.urlopen(url)
-        except urllib2.HTTPError as e:
+            response = urlopen(url)
+        except HTTPError as e:
             if e.getcode() == 404:
                 logging.debug('No mods.xml found for date {0}, at "{1}"'.format(
                         date, url
@@ -118,9 +104,9 @@ class CRECScraper(object):
             return None
         data = response.read()
         mods_path = os.path.join(self.download_dir, 'mods.xml')
-        with open(mods_path, 'w') as f:
+        with open(mods_path, 'wb') as f:
             f.write(data)
-        return mods_path
+        return str(mods_path)
 
     def extract_html_files(self, zip_path):
         """Unpacks all html files in the zip at the provided path to the value
@@ -162,15 +148,12 @@ class CRECScraper(object):
             data_type,
             os.path.basename(file_path),
         )
-        with open(file_path) as f:
-            logging.debug(
-                'Uploading "{0}" to "s3://{1}/{2}".'.format(
-                    file_path, self.s3_bucket, s3_key
-                )
+        logging.debug(
+            'Uploading "{0}" to "s3://{1}/{2}".'.format(
+                file_path, self.s3_bucket, s3_key
             )
-            self.s3.put_object(
-                Body=f, Bucket=self.s3_bucket, Key=s3_key
-            )
+        )
+        self.s3.Object(self.s3_bucket, s3_key).upload_file(file_path)
         return s3_key
 
     def scrape_files_for_date(self, date):
