@@ -3,16 +3,159 @@
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
-  padding: 32px;
+  padding: 16px;
+  background-color: #1C2831;
+}
+
+.HeaderBar-container h1 {
+  font-size: 14px;
+  font-weight: normal;
+  color: white;
 }
 
 .HeaderBar-title {
   margin: 0;
 }
 
-.HeaderBar-tagline {
-  margin-top: 8px;
-  font-size: 18px;
-  font-weight: 200;
-  color: #999;
+.headerBarSearch input {
+  background-color: #1C2831;
+  border-bottom: 1px solid white;
+  color: white;
+  box-shadow: none;
+  padding: 8px;
+  font-weight: normal;
 }
+
+.headerBarSearch input:focus {
+  color: #B1C548;
+  border-bottom: 1px solid #B1C548;
+}
+
+.SearchResults {
+  color: white;
+  width: 600px;
+  margin: 40px auto;
+}
+
+.ResultsHeader {
+  border-bottom: 1px solid #404040;
+  margin-bottom: 32px;
+}
+
+.ResultsHeader H1 {
+  margin: 16px 0;
+}
+
+.TextSmall {
+  font-size: 14px;
+  color: #757575;
+}
+
+.SearchResults h1, h2 {
+  font-size: 48px;
+  letter-spacing: 2px;
+  font-family: serif;
+}
+
+.DateToggle ul {
+  list-style: none;
+  text-align: center;
+  color: #029CD0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.DateToggle li {
+  display: inline-block;
+  padding: 8px 16px;
+  border: 1px solid #029CD0;
+}
+
+li.TabActive {
+  color: #151E25;
+  background-color: #029CD0;
+}
+
+.TopMetricsList {
+  margin-top: 48px;
+  display: flex;
+}
+
+.MetricListItem {
+  text-align: center;
+  background-color: #2B3A46;
+  height: 152px;
+  width: 296px;
+}
+
+.MetricListItem h2 {
+  margin-bottom: 0px;
+}
+
+.MetricListItem span {
+  font-size: 14px;
+  color: #757575;
+}
+
+h3 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.TopRecords {
+  margin-top: 88px;
+}
+
+.Record {
+  background-color: #2B3A46;
+  padding: 24px;
+  position: relative;
+  margin-top: 40px;
+}
+
+.Record:hover {
+  border-bottom: 3px solid #B1C548;
+}
+
+.Record .Date {
+  background-color: #202C36;
+  color: #B3B3B3;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 16px;
+  display: inline-block;
+  position: absolute;
+  top: -10px;
+  left: 240px;
+}
+
+.Record .RecordTitle {
+  font-size: 14px;
+  color: #B3B3B3;
+  letter-spacing: 0.6px;
+  font-family: serif;
+  font-weight: normal;
+}
+
+.Record .MentionCount {
+  font-size: 14px;
+  color: #B3B3B3;
+  position: absolute;
+  top: 42px;
+  right: 24px;
+}
+
+.Record blockquote {
+  font-size: 18px;
+  font-family: times;
+  margin: 24px 0;
+  line-height: 1.5;
+}
+
+.Record .Highlight {
+  border-bottom: 3px solid #9CAB4C;
+}
+
+
