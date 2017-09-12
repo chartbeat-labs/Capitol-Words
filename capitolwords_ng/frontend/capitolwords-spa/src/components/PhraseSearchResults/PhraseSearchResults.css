@@ -1,17 +1,18 @@
 .PhraseSearchResults-container {
   padding: 32px;
+  width: 670px;
+  display: flex;
+  margin: 15px auto;
+  flex-direction: row;
 }
 
 .PhraseSearchResults-list {
   list-style: none;
-  padding: 0;
   margin: 32px 0 0 0;
 }
 
 .PhraseSearchResults-item {
   margin: 16px 0;
-  display: flex;
-  flex-direction: row;
 }
 
 .PhraseSearchResults-item-id, .PhraseSearchResults-item-title {
@@ -20,4 +21,50 @@
 
 .PhraseSearchResults-item-id {
   flex: 0 0 320px;
+}
+
+.PhraseSearchResults-results-for {
+	font-size: 14px;
+	color: #757575;
+}
+
+.PhraseSearchResults-phrase {
+	font-family: "Times New Roman", Times, serif;
+	margin: 20px auto;
+	color: #fff;
+	font-size: 350%;
+	font-weight: 690;
+	border-bottom: 0.25px solid #555;
+}
+
+.PhraseSearchResults-date-selector {
+	color: #029cd0;
+}
+
+.PhraseSearchResults-metrics-container {
+	background-color: #2b3a46;
+	margin: 20px auto;
+	padding-top: 50px;
+	padding-bottom: 50px;
+}
+
+.PhraseSearchResults-results-count-metric {
+	text-align: center;
+	float: left;
+	width: 50%;
+}
+
+.PhraseSearchResults-metric-value{
+	font-family: "Times New Roman", Times, serif;
+	font-size: 350%;
+	color: #fff;
+}
+
+.PhraseSearchResults-metric-name {
+	color: #6e7274;
+	font-size: 12.5px;
+}
+
+.PhraseSearchResults-results-benchmark {
+	text-align: center;
 }

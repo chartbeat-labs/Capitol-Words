@@ -154,7 +154,11 @@ def search_by_params(request):
     else:
         response = search.query(q).execute()
     if response.success():
-        return JsonResponse(response.to_dict())
+        results = response.to_dict()
+        for result in results['hits']['hits']:
+            result['count'] = result['_source']['content'].count(params['content'])
+        results['params'] = params
+        return JsonResponse(results)
     return JsonResponse("Found nothing")
 
 

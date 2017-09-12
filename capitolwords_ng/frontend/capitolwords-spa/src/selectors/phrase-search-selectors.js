@@ -26,3 +26,8 @@ export const searchResultList = createSelector(
   getPhraseSearch,
   phraseSearch => phraseSearch.results && phraseSearch.results.hits.hits
 );
+
+export const searchContent = createSelector(
+  getPhraseSearch,
+  phraseSearch => phraseSearch.phrase
+);

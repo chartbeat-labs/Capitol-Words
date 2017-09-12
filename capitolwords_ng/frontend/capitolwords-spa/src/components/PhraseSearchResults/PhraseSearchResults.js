@@ -9,6 +9,7 @@ import {
   isSearchFailure,
   isSearchSuccess,
   searchResultCount,
+  searchContent,
   searchResultList,
 } from '../../selectors/phrase-search-selectors';
 
@@ -19,6 +20,7 @@ class PhraseSearchResults extends Component {
     isSearchSuccess: PropTypes.bool.isRequired,
     searchResultCount: PropTypes.number,
     searchResultList: PropTypes.array,
+    searchContent: PropTypes.string
   };
 
   renderResultItem(item) {
@@ -46,6 +48,7 @@ class PhraseSearchResults extends Component {
       isSearchFailure,
       isSearchSuccess,
       searchResultCount,
+      searchContent
     } = this.props;
 
     if (isSearching) {
@@ -59,8 +62,30 @@ class PhraseSearchResults extends Component {
     if (isSearchSuccess) {
       return (
         <div>
-          <div>Search returned { searchResultCount } results.</div>
-          { searchResultCount && this.renderResultList() }
+          <div className="PhraseSearchResults-results-for">Search results for:</div>
+          <div className="PhraseSearchResults-phrase"> {searchContent} </div>
+          <div className="PhraseSearchResults-date-selector">
+            30 days | 3 months | 6 months
+          </div>
+          <div className="PhraseSearchResults-metrics-container">
+            <div className="PhraseSearchResults-results-count-metric">
+              <div className="PhraseSearchResults-metric-value">
+                { searchResultCount }
+              </div>
+              <div className="PhraseSearchResults-metric-name">
+                Total Mentions
+              </div>
+            </div>
+            <div className="PhraseSearchResults-results-benchmark">
+              <div className="PhraseSearchResults-metric-value">
+                +10%
+              </div>
+              <div className="PhraseSearchResults-metric-name">
+                Compared to previous 30 days
+              </div>
+            </div>
+          </div>
+          {this.renderResultList() }
         </div>
       )
     }
@@ -83,6 +108,7 @@ export default connect(state => ({
   isSearching: isSearching(state),
   isSearchFailure: isSearchFailure(state),
   isSearchSuccess: isSearchSuccess(state),
+  searchContent: searchContent(state),
   searchResultCount: searchResultCount(state),
   searchResultList: searchResultList(state),
 }))(PhraseSearchResults);
