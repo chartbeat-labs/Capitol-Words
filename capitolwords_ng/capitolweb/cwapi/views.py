@@ -168,7 +168,19 @@ def count_term_in_range(term, start_date, end_date):
         'range': {'date_issued': {'gte': start_date, 'lte': end_date}}
     }
     docs = search.query(query).filter(date_filter).execute()
-    return docs
+    return docs.to_dict()['hits']['hits']
+
+
+def get_total_in_range(term, start_date, end_date):    
+    search = make_search().sort('-date_issued')
+    queries = [
+        Q('match', content={'query': term, 'operator': 'and'}),
+        get_date_range(start_date, end_date),
+    ]
+    q = Q('bool', must=queries)
+    search_resp = search.highlight('content', fragment_size=200).query(q).execute()
+    return search_resp.to_dict()['hits']['total']
+
 
 
 @api_view(['GET'])
@@ -198,48 +210,23 @@ def count_of_term_in_content(request, term):
     # TODO: remove when we have more recent data
     start_date -= timedelta(days=150)
     end_date -= timedelta(days=150)
-
-
     current_period_docs = count_term_in_range(term, start_date, end_date)
-
-    prev_start_date = start_date - timedelta(days=days_ago)
-    prev_end_date = end_date - timedelta(days=days_ago)
-    prev_period_docs = count_term_in_range(term, prev_start_date, prev_end_date)
-
+    current_period_docs.sort(key=lambda d: -d['_score'])
     current_daily_counts = defaultdict(int)
     for doc in current_period_docs:
-        current_daily_counts[doc.date_issued] += 1
+        current_daily_counts[doc['_source']['date_issued']] += doc['_source']['content'].count('term')
+    total_count = get_total_in_range(term, start_date, end_date)
+
+    # Get last benchmark data
+    prev_start_date = start_date - timedelta(days=days_ago)
+    prev_end_date = end_date - timedelta(days=days_ago)
+    prev_period_docs = count_term_in_range(term, prev_start_date, prev_end_date)    
     previous_daily_counts = defaultdict(int)
     for doc in prev_period_docs:
-        previous_daily_counts[doc.date_issued] += 1
+        previous_daily_counts[doc['_source']['date_issued']] += doc['_source']['content'].count('term')
+    prev_total_count = get_total_in_range(term, prev_start_date, prev_end_date)
 
-    current_period_total = sum([v for k, v in current_daily_counts.items()])
-    prev_period_total = sum([v for k, v in previous_daily_counts.items()])
-
-    sorted_docs = current_period_docs.to_dict()['hits']['hits']
-    sorted_docs.sort(key=lambda d: -d['_score'])
-
-
-    search = make_search().sort('-date_issued')
-    queries = [
-        Q('match', content={'query': term, 'operator': 'and'}),
-        get_date_range(start_date, end_date),
-    ]
-    q = Q('bool', must=queries)
-    search_resp = search.highlight('content', fragment_size=200).query(q).execute()
-
-
-    search = make_search().sort('-date_issued')
-    queries = [
-        Q('match', content={'query': term, 'operator': 'and'}),
-        get_date_range(prev_start_date, prev_end_date),
-    ]
-    q = Q('bool', must=queries)
-    prev_search_resp = search.highlight('content', fragment_size=200).query(q).execute()
-
-
-
-    for doc in sorted_docs:
+    for doc in current_period_docs:
         doc['mentions'] = doc['_source']['content'].lower().count(term.lower())
         doc['search_phrase'] = term
         date_issued = datetime.strptime(
@@ -251,27 +238,19 @@ def count_of_term_in_content(request, term):
         end = min(start + 400, len(doc['_source']['content']))
         doc['snippet'] = '"...{0}..."'.format(doc['_source']['content'][start:end])
         doc['speakers'] = []
-
         if doc['_source'].get('speakers', []):
             speaker = doc['_source']['speakers'][0]
-            # TODO: filter by time as well to account for people with same full name
             doc['speakers'] = []
             for person in CongressPerson.objects.filter(official_full=speaker):
-                # TODO: this should be based on time of crec, not most recent
                 bio_page_url = 'https://www.congress.gov/member/{0}/{1}'.format(
                     '-'.join(person.official_full.lower().split()), person.bioguide_id
                 )
                 doc['speakers'].append({'im_url': person.image_sm, 'party': person.terms.last().party, 'bio_page_url': bio_page_url})
-            doc['speaker_im_url'] = [person.image_sm]
-
-
-    total_count = search_resp.to_dict()['hits']['total']
-    prev_total_count = max(prev_search_resp.to_dict()['hits']['total'], 1)
 
     return JsonResponse(
         {
-            'delta': int(100 * ((total_count - prev_total_count) / float(prev_total_count))),
-            'docs': sorted_docs,
+            'delta': int(100 * ((total_count - prev_total_count) / float(max(prev_total_count, 1)))),
+            'docs': current_period_docs,
             'term': term,
             'current_period': {
                 'daily_breakdown': current_daily_counts,
@@ -285,3 +264,5 @@ def count_of_term_in_content(request, term):
             'end_date': end_date,
         }
     )
+
+
