@@ -4,7 +4,6 @@ import logging
 import re
 from datetime import datetime
 from collections import Counter
-from collections import defaultdict
 from itertools import chain
 
 import boto3
@@ -35,10 +34,20 @@ CREC_PREFIX_TEMPLATE = 'crec/%Y/%m/%d/crec'
 CREC_KEY_TEMPLATE = '{prefix}/{id}.htm'
 
 APPROX_MATCH_THRESHOLD = 90
-GENERIC_SPEAKERS = [
-    'The CLERK', 'The SPEAKER pro tempore', 'The SPEAKER',
-    'The PRESIDING OFFICER', 'The ACTING PRESIDENT pro tempore'
+HOUSE_GENERIC_SPEAKERS = [
+    'The CLERK', 'The Acting CLERK', 'The ACTING CLERK',
+    'The SPEAKER pro tempore', 'The SPEAKER'
+    'The Acting SPEAKER pro tempore', 'The ACTING SPEAKER pro tempore',
+    'The Acting CHAIR', 'The ACTING CHAIR', 'The Acting CHAIRMAN',
+    'The ACTING CHAIRMAN', 'The CHAIRMAN', 'The CHAIRWOMAN',
 ]
+SENATE_GENERIC_SPEAKERS = [
+    'The PRESIDING OFFICER', 'The PRESIDENT pro tempore',
+    'The Acting PRESIDENT pro tempore', 'The ACTING PRESIDENT pro tempore',
+    'The VICE PRESIDENT', 'The CHIEF JUSTICE', 'Mr. Counsel', 'Mrs. Counsel',
+    'Ms. Counsel'
+]
+GENERIC_SPEAKERS = HOUSE_GENERIC_SPEAKERS + SENATE_GENERIC_SPEAKERS
 
 
 def xpath_parse(root, paths, namespaces):
@@ -61,6 +70,24 @@ def xpath_parse(root, paths, namespaces):
 
 
 def attribute_segments(sents, speaker_ids, record_id):
+    """
+    Split iterable of sentences into segments attributed speakers.
+
+    Speakers can be indviduals identified by name (and usually bioGuideId)
+    or generic speakers (roles). A sentence containing an individual or
+    generic speaker (exact or approximate match) marks the beginning of
+    new segment.
+
+    Args:
+        sents (iterable): input sentences
+        speaker_ids (dict): dict {'<speaker name>': '<bioGuideId>'}
+        record_id (str): Record ID, used to build segment IDs
+
+    Returns:
+        list(dict): [dict {'id': '<segment ID>', 'speaker': '<speaker name>',
+                           'text': <segment text>''}]
+
+    """
     previous = None
     current = None
     segment_index = 0
@@ -73,14 +100,14 @@ def attribute_segments(sents, speaker_ids, record_id):
                 individual_speakers, GENERIC_SPEAKERS)), None)
         if speaker is not None:
             current = speaker
-            logging.info(
+            logging.debug(
                 'Found speaker: {}, previous speaker {}'.format(current, previous))
         else:
             speaker, score = process.extractOne(sent, chain(
                 individual_speakers, GENERIC_SPEAKERS))
             if score > APPROX_MATCH_THRESHOLD:
                 current = speaker
-                logging.info(
+                logging.debug(
                     'Found speaker: {} (approx. score {}/100), previous speaker: {}'.format(
                         current, score, previous))
 
@@ -115,53 +142,12 @@ class CRECParser(object):
         self.bucket = bucket
         self.nlp = spacy.load('en')
 
-    def find_segments(self, doc, speakers):
-        if not speakers:
-            logging.info('No speakers available')
-            return []
-        previous = None
-        current = None
-        sents = []
-        segments = []
-        for sent in doc.sents:
-            sent_str = sent.string
-            speaker = next(
-                filter(lambda person: person in sent_str, speakers), None)
-            if speaker is not None:
-                current = speaker
-                logging.info(
-                    'Found speaker: {}, previous speaker {}'.format(current, previous))
-            else:
-                speaker, score = process.extractOne(sent_str, speakers)
-                if score > APPROX_MATCH_THRESHOLD:
-                    current = speaker
-                    logging.info(
-                        'Found speaker: {} (approx. score {}/100), previous speaker: {}'.format(
-                            current, score, previous))
-
-            if previous != current:
-                if sents:
-                    segments.append({
-                        'speaker': previous,
-                        'text': ' '.join(sents)})
-                previous = current
-                sents = []
-            else:
-                sents.append(sent_str)
-
-        if sents:
-            segments.append({
-                'speaker': previous,
-                'text': ' '.join(sents)})
-
-        return segments
-
     def parse_mods_file(self, mods_file):
         logging.info('Parsing mods file...')
         doc = etree.parse(mods_file)
         constituents = doc.xpath(
             '//ns:relatedItem[@type="constituent"]',
-            namespaces=DEFAULT_XML_NS,
+            namespaces=self.xml_namespace,
         )
 
         records = []
@@ -173,13 +159,13 @@ class CRECParser(object):
             )
             persons = constituent.xpath(
                 'ns:extension/ns:congMember',
-                namespaces=DEFAULT_XML_NS
+                namespaces=self.xml_namespace
             )
             record['speaker_ids'] = {}
             for person in persons:
                 parsed_name = person.xpath(
                     'string(ns:name[@type="parsed"])',
-                    namespaces=DEFAULT_XML_NS
+                    namespaces=self.xml_namespace
                 )
                 sanitized_name = re.sub(' of .*$', '', parsed_name)
                 if person.get('role') == 'SPEAKING':
@@ -188,7 +174,7 @@ class CRECParser(object):
 
         date_issued_str = doc.xpath(
             'string(//ns:originInfo/ns:dateIssued)',
-            namespaces=DEFAULT_XML_NS,
+            namespaces=self.xml_namespace,
         )
         date_issued = datetime.strptime(date_issued_str, '%Y-%m-%d')
         prefix = date_issued.strftime(CREC_PREFIX_TEMPLATE)
