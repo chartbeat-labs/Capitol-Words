@@ -12,7 +12,7 @@ import textacy
 from lxml import etree
 from fuzzywuzzy import process
 
-import capitolweb.workers.text_utils as text_utils
+import parser.text_utils as text_utils
 
 
 DEFAULT_XML_NS = {'ns': 'http://www.loc.gov/mods/v3'}
