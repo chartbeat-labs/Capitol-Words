@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'django_celery_results',
     'django_extensions',
     'workers',
+    'scraper'
 ]
 
 MIDDLEWARE = [
@@ -154,6 +155,10 @@ LOGGING = {
             'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
         },
         'legislators.views': {
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+        },
+        'scraper.crec_scraper': {
             'handlers': ['console'],
             'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
         },
