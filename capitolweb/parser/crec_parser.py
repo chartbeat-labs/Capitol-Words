@@ -54,7 +54,7 @@ SENATE_GENERIC_SPEAKERS = [
 GENERIC_SPEAKERS = HOUSE_GENERIC_SPEAKERS + SENATE_GENERIC_SPEAKERS
 
 
-class CRECModsInfo(object):
+class CRECParser(object):
     
     def __init__(self, 
                  xml_tree,
@@ -360,6 +360,12 @@ class CRECModsInfo(object):
         return segments_
     
     def to_es_doc(self):
+        """Returns the CRECParser as a dict ready to be uploaded to
+        elasticsearch.
+        
+        Returns:
+            dict: A dict representation of this document.
+        """
         return {
             'id': self.id,
             'title': self.title,
@@ -375,6 +381,13 @@ class CRECModsInfo(object):
 
 
 def upload_speaker_word_counts(crec_parser):
+    """Creates new entries of the SpeakerWordCounts ORM model containing 
+    counts of named entities and noun chunks within this document.
+    
+    Args:
+        crec_parser (:class:`parser.crec_parser.CRECParser`): A CRECParser
+            instance representing a single CREC document.
+    """"
     if crec_parser.speaker_ids:
         named_entities = {'named_entities_{0}'.format(ne_type): counts                    
                           for ne_type, counts in crec_parser.named_entity_counts.items()}
@@ -390,6 +403,21 @@ def upload_speaker_word_counts(crec_parser):
 
 
 def extract_crecs_from_mods(mods_file_obj, xml_namespace=DEFAULT_XML_NS):
+    """Takes a file-like object containing mods.xml data for a single day,
+    extracts each "constituent" (a single CREC document from that day) and 
+    creates a new CRECParser instance for that document. Returns all CRECParser
+    instances created for a single day as a list.
+    
+    Args:
+        mods_file_obj (file): An open file, StringIO or BytesIO buffer
+            containing mods.xml data.
+        xml_namespace (dict): The xml_namespaces argument to use with the lxml
+            parser.
+    
+    Returns:
+        list of :class:`parser.crec_parser.CRECParser`: A list of parsed CREC
+            docs for a single day.
+    """
     xml_tree = None
     xml_tree = etree.parse(mods_file_obj)
     constituents = xml_tree.xpath(
@@ -401,4 +429,4 @@ def extract_crecs_from_mods(mods_file_obj, xml_namespace=DEFAULT_XML_NS):
         namespaces=xml_namespace,
     )
     date_issued = datetime.strptime(date_issued_str, '%Y-%m-%d')
-    return [CRECModsInfo(c, date_issued) for c in constituents]
+    return [CRECParser(c, date_issued) for c in constituents]
